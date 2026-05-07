@@ -51,9 +51,15 @@ def evaluate_promotion(
     if len(daily) < 30:
         reasons.append("insufficient_paper_returns")
     else:
-        sharpe = (daily.mean() / daily.std()) * (252 ** 0.5) if daily.std() > 0 else 0
-        if sharpe < c.min_sharpe:
-            reasons.append(f"paper_sharpe_low:{sharpe:.2f}")
+        std = float(daily.std())
+        # std가 0 또는 floating-point 노이즈 수준이면 의미 있는 변동성 부족 → 자격 미달
+        if std < 1e-6:
+            reasons.append("paper_volatility_too_low_unrealistic")
+            sharpe = 0.0
+        else:
+            sharpe = (float(daily.mean()) / std) * (252 ** 0.5)
+            if sharpe < c.min_sharpe:
+                reasons.append(f"paper_sharpe_low:{sharpe:.2f}")
         rolling_max = paper_equity_curve["equity"].cummax()
         mdd = float(((paper_equity_curve["equity"] - rolling_max) / rolling_max).min())
         if mdd < c.max_mdd:

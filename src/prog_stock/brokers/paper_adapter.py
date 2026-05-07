@@ -2,14 +2,17 @@
 
 실시간 시세는 위임받은 BrokerPort(보통 KisAdapter)에서 가져오고,
 주문은 실제로 보내지 않고 메모리/SQLite에 가상 체결로 기록한다.
+재시작 안전성을 위해 SQLite의 positions 테이블에 cash와 보유 포지션 영속화.
 
 dry_run 모드: 전략 X, 인프라만 검증
 paper 모드: 전략 ON, 가상 자본 운용
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import AsyncIterator
 
 import structlog
@@ -31,7 +34,7 @@ log = structlog.get_logger(__name__)
 
 
 class PaperAdapter(BrokerPort):
-    """가상 자본 + 실시간 시세."""
+    """가상 자본 + 실시간 시세 + 디스크 영속화."""
 
     def __init__(
         self,
@@ -40,13 +43,46 @@ class PaperAdapter(BrokerPort):
         slippage_rate: float = 0.001,
         commission_rate: float = 0.00015,
         sell_tax_rate: float = 0.0018,
+        state_path: Path | None = None,
     ) -> None:
         self._quote_source = quote_source
-        self._cash = starting_cash
-        self._positions: dict[str, Position] = {}
         self.slippage_rate = slippage_rate
         self.commission_rate = commission_rate
         self.sell_tax_rate = sell_tax_rate
+        self._state_path = state_path
+        self._cash, self._positions = self._load_state(starting_cash)
+
+    def _load_state(self, default_cash: float) -> tuple[float, dict[str, Position]]:
+        if self._state_path is None or not self._state_path.exists():
+            return default_cash, {}
+        try:
+            data = json.loads(self._state_path.read_text())
+            cash = float(data.get("cash", default_cash))
+            positions = {
+                sym: Position(symbol=sym, quantity=int(p["quantity"]),
+                              avg_price=float(p["avg_price"]),
+                              current_price=float(p.get("current_price", p["avg_price"])))
+                for sym, p in data.get("positions", {}).items()
+            }
+            log.info("paper_state_loaded", cash=cash, positions=len(positions))
+            return cash, positions
+        except Exception as e:
+            log.warning("paper_state_load_failed_reset", error=str(e))
+            return default_cash, {}
+
+    def _persist(self) -> None:
+        if self._state_path is None:
+            return
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "cash": self._cash,
+            "positions": {
+                sym: {"quantity": p.quantity, "avg_price": p.avg_price,
+                      "current_price": p.current_price}
+                for sym, p in self._positions.items()
+            },
+        }
+        self._state_path.write_text(json.dumps(payload, ensure_ascii=False))
 
     def place_order(self, order: Order) -> OrderResult:
         try:
@@ -103,6 +139,7 @@ class PaperAdapter(BrokerPort):
                     symbol=order.symbol, quantity=new_qty, avg_price=existing.avg_price, current_price=fill_price,
                 )
 
+        self._persist()
         return OrderResult(
             broker_order_id=str(uuid.uuid4()),
             status=OrderStatus.FILLED,
