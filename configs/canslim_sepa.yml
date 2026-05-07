@@ -1,0 +1,31 @@
+# v1 전략 파라미터.
+# 변경 시 docs/knowledge_base/07_decision_log.md에 사유 기록 필수.
+
+strategy:
+  name: canslim_sepa
+  fundamental_quarters: 4
+  min_op_income_yoy: 0.25
+  rs_top_pct: 0.30
+  breakout_volume_ratio: 1.5
+  trailing_activate_pct: 0.20
+  trailing_drop_pct: 0.10
+  hard_stop_loss: -0.07
+  consecutive_below_50ma_days: 5
+  high_lookback_days: 252
+
+risk:
+  max_positions: 5
+  risk_per_trade: 0.015
+  daily_loss_limit: -0.03
+  mdd_limit: -0.15
+  max_position_pct: 0.25
+  cooldown_days: 30
+
+universe:
+  min_market_cap_krw: 100000000000  # 1,000억
+  excluded_markets: ["CONEX"]
+
+costs:
+  commission_rate: 0.00015
+  sell_tax_rate: 0.0018
+  slippage_rate: 0.001

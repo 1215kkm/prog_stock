@@ -1,0 +1,35 @@
+name: Deploy to Lightsail
+
+# 사용자가 AWS Lightsail 인스턴스를 생성하고 secrets를 설정한 뒤 활성화
+# 활성화 전에는 빈 placeholder.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: false  # AWS 설정 완료 후 true로 변경
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to ECR Public
+        run: |
+          echo "${{ secrets.AWS_ACCESS_KEY_ID }}" | docker login --username AWS --password-stdin public.ecr.aws
+
+      - name: Build image
+        run: docker build -t prog_stock:${{ github.sha }} -f docker/Dockerfile .
+
+      - name: SSH and pull
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            cd /opt/prog_stock
+            git pull
+            docker compose pull
+            docker compose up -d
