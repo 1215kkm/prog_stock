@@ -126,13 +126,15 @@ prog_stock/
 ├── src/prog_stock/
 │   ├── brokers/          (port.py, kis_adapter.py, paper_adapter.py)
 │   ├── data/             (universe, fundamentals, history, calendar)
-│   ├── strategies/       (base, canslim_sepa)
+│   ├── strategies/       (base, canslim_sepa, dual_momentum, volatility_breakout)
 │   ├── risk/             (guard, sizing)
 │   ├── execution/        (order_manager)
-│   ├── runtime/          (mode, scheduler, loop)
+│   ├── runtime/          (mode, scheduler, loop, state, logging_config)
+│   ├── agents/           (bounds, base, researcher, auditor, regime, portfolio, orchestrator)
 │   ├── monitoring/       (telegram_bot, morning_report)
 │   ├── storage/          (db)
 │   ├── backtest/         (runner)
+│   ├── tools/            (cli, backfill_*)
 │   └── config.py
 ├── tests/
 ├── notebooks/
@@ -144,13 +146,31 @@ prog_stock/
 
 ## 개발 단계 (현재 위치 표시)
 
-- [x] **Phase 0** — 도메인 학습 + 지식 베이스 작성 ← *현재 진행*
-- [ ] Phase 1 — 스캐폴딩 + KIS PoC
-- [ ] Phase 2 — 인프라 dry-run (전략 X)
-- [ ] Phase 3 — 백테스트 엔진 + v1 전략
-- [ ] Phase 4 — 모의투자 라이브 (≥3개월)
-- [ ] Phase 5 — 클라우드 배포
-- [ ] Phase 6 — 실거래 게이트 통과 후 전환
+- [x] **Phase 0** — 도메인 학습 + 지식 베이스 작성
+- [x] **Phase 1** — 스캐폴딩 + KIS PoC
+- [x] **Phase 2** — 인프라 (어댑터/데이터/리스크/실행)
+- [x] **Phase 3** — 백테스트 + v1 전략
+- [x] **Phase 4** — 운영 루프 + 모니터링 (90일 페이퍼 운영 필요)
+- [x] **Phase 5** — Docker + CI/CD (AWS 배포 사용자 진행)
+- [x] **Phase 6** — 멀티 에이전트 자율 시스템 (Researcher / Auditor / Regime / Portfolio)
+- [ ] **Phase 7** — 실거래 게이트 통과 후 전환 ← *Promotion gate 자동*
+
+---
+
+## 멀티 에이전트 자율 시스템 (Phase 6)
+
+매일 16:30 (`daily_pipeline`) + 매주 일요일 23:00 (`weekly_pipeline`) 자동 실행:
+
+1. **Researcher**: 파라미터 그리드 백테스트 → 더 나은 후보 발견 시 카나리(자본 1%, 30일) 자동 시작
+2. **Auditor**: 거래 일지 분석 → 5연속 손절 시 **자동 HALT**, 승률 저하 알림
+3. **Regime Detector**: KOSPI200 vs 200MA → 상승장 100% / 횡보 50% / 하락 25% 자본 자동 조절
+4. **Portfolio Manager**: 멀티 전략(CAN SLIM + 듀얼 모멘텀 + 변동성 돌파) 자본 비중 90일 성과 기반 자동 재배분
+
+**자율성 안전장치 (`agents/bounds.py`)**:
+- 불변 룰 6가지(아래) 코드 레벨 잠금 — 어떤 에이전트도 약화 불가
+- 수치 파라미터는 PARAM_BOUNDS 경계 내에서만 변경 (예: 손절 -5% ~ -10%)
+- 경계 외 변경 시도는 Orchestrator에서 자동 REJECTED
+- 모든 결정 텔레그램 자동 전송 — 사용자 `/stop`으로 언제든 차단
 
 ---
 

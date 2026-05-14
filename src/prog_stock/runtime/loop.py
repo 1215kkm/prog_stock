@@ -15,6 +15,8 @@ from datetime import date, datetime, time as dtime, timedelta
 import pandas as pd
 import structlog
 
+from prog_stock.agents.orchestrator import Orchestrator
+from prog_stock.agents.regime import RegimeDetectorAgent
 from prog_stock.brokers.kis_adapter import KisAdapter
 from prog_stock.brokers.paper_adapter import PaperAdapter
 from prog_stock.brokers.port import BrokerPort, OrderType, Side
@@ -55,8 +57,10 @@ class TradingLoop:
         self.state_store = StateStore(settings.cache_dir / "runtime_state.json")
         self.state: RuntimeState = self.state_store.load()
         self.notifier = TelegramNotifier(settings.telegram_bot_token, settings.telegram_chat_id)
+        self.orchestrator = Orchestrator(self.db, self.notifier)
         self._kill = False
         self._last_event_id = self._latest_event_id()
+        self._last_orchestrator_date: date | None = None
 
     def _build_broker(self) -> BrokerPort:
         if self.mode == RunMode.LIVE:
@@ -215,6 +219,7 @@ class TradingLoop:
             self._intraday_loop(today)
 
             self._post_market(today)
+            self._run_orchestrator_if_due(today)
             self._sleep_until_next_session()
 
         if self._kill:
@@ -287,11 +292,13 @@ class TradingLoop:
         market_idx = pd.read_parquet(market_idx_path) if market_idx_path.exists() else pd.DataFrame()
 
         buys = self.strategy.select_candidates(today, snapshot, history_loader, fundamentals, market_idx)
+        capital_scale = self._capital_scale()
+        scaled_equity = balance.total_equity * capital_scale
         for sig in buys:
             if sig.action != Action.BUY or sig.target_price is None:
                 continue
             qty = calc_quantity(
-                equity=balance.total_equity, price=sig.target_price,
+                equity=scaled_equity, price=sig.target_price,
                 risk_per_trade=settings.risk_per_trade,
                 stop_loss_pct=settings.hard_stop_loss,
                 max_position_pct=settings.max_position_pct,
@@ -303,6 +310,22 @@ class TradingLoop:
                 limit_price=sig.target_price * 1.005,
                 reason="ENTRY_BREAKOUT", ctx=ctx,
             )
+
+    def _run_orchestrator_if_due(self, today: date) -> None:
+        """16:30 이후 에이전트 daily pipeline + 일요일이면 weekly."""
+        if self._last_orchestrator_date == today:
+            return
+        try:
+            self.orchestrator.daily_pipeline()
+            if today.weekday() == 6:  # Sunday
+                self.orchestrator.weekly_pipeline()
+            self._last_orchestrator_date = today
+        except Exception as e:
+            log.exception("orchestrator_failed", error=str(e))
+
+    def _capital_scale(self) -> float:
+        """레짐 감지기가 결정한 자본 비중 (0.25 ~ 1.0)."""
+        return RegimeDetectorAgent.current_capital_scale(self.db)
 
     def _post_market(self, today: date) -> None:
         balance = self.broker.balance()
