@@ -153,7 +153,9 @@ prog_stock/
 - [x] **Phase 4** — 운영 루프 + 모니터링 (90일 페이퍼 운영 필요)
 - [x] **Phase 5** — Docker + CI/CD (AWS 배포 사용자 진행)
 - [x] **Phase 6** — 멀티 에이전트 자율 시스템 (Researcher / Auditor / Regime / Portfolio)
-- [ ] **Phase 7** — 실거래 게이트 통과 후 전환 ← *Promotion gate 자동*
+- [x] **Phase 7** — 뉴스 모니터링 (한국 RSS + DART + 거시 캘린더, 알림만)
+- [x] **Phase 8** — 목표 수익률 기반 자동 탐색 모드 (안정/균형/공격 프리셋)
+- [ ] **Phase 9** — 실거래 게이트 통과 후 전환 ← *Promotion gate 자동*
 
 ---
 

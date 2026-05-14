@@ -87,6 +87,56 @@ CREATE INDEX IF NOT EXISTS idx_orders_symbol_mode ON orders(symbol, mode);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_trades_mode_exit ON trades(mode, exit_at);
 CREATE INDEX IF NOT EXISTS idx_events_occurred ON system_events(occurred_at);
+
+CREATE TABLE IF NOT EXISTS news_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    collected_at TEXT NOT NULL,
+    published_at TEXT,
+    source TEXT NOT NULL,
+    symbol TEXT,
+    headline TEXT NOT NULL,
+    url TEXT,
+    priority TEXT NOT NULL,
+    keywords_json TEXT,
+    delivered INTEGER DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS macro_events (
+    event_date TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    impact_level TEXT,
+    description TEXT,
+    PRIMARY KEY (event_date, event_type)
+);
+
+CREATE TABLE IF NOT EXISTS target_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    preset TEXT NOT NULL,
+    target_annual_return REAL NOT NULL,
+    max_mdd REAL NOT NULL,
+    min_sharpe REAL NOT NULL,
+    horizon_months INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    candidates_found INTEGER DEFAULT 0,
+    applied_decision_id INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS target_candidates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    params_json TEXT NOT NULL,
+    cagr REAL, sharpe REAL, mdd REAL, profit_factor REAL, trades INTEGER,
+    rank INTEGER,
+    overfit_warning TEXT,
+    FOREIGN KEY (session_id) REFERENCES target_sessions(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_collected ON news_items(collected_at);
+CREATE INDEX IF NOT EXISTS idx_news_symbol ON news_items(symbol);
+CREATE INDEX IF NOT EXISTS idx_news_priority ON news_items(priority);
+CREATE INDEX IF NOT EXISTS idx_target_sessions_status ON target_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_target_candidates_session ON target_candidates(session_id);
 """
 
 

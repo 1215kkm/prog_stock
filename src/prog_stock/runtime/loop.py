@@ -57,7 +57,7 @@ class TradingLoop:
         self.state_store = StateStore(settings.cache_dir / "runtime_state.json")
         self.state: RuntimeState = self.state_store.load()
         self.notifier = TelegramNotifier(settings.telegram_bot_token, settings.telegram_chat_id)
-        self.orchestrator = Orchestrator(self.db, self.notifier)
+        self.orchestrator = Orchestrator(self.db, self.notifier, self.broker)
         self._kill = False
         self._last_event_id = self._latest_event_id()
         self._last_orchestrator_date: date | None = None
@@ -237,7 +237,7 @@ class TradingLoop:
 
     def _send_morning_report(self, today: date) -> None:
         try:
-            text = build_report(today, self.broker, self.strategy)
+            text = build_report(today, self.broker, self.strategy, self.db)
             self.notifier.send(text)
         except Exception as e:
             log.error("morning_report_failed", error=str(e))

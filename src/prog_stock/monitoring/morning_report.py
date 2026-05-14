@@ -1,4 +1,4 @@
-"""08:50 사전 점검 리포트 — 오늘 매수 후보, 청산 예정, 잔여 한도."""
+"""08:50 사전 점검 리포트 — 오늘 매수 후보, 청산 예정, 잔여 한도, 뉴스, 거시 이벤트."""
 from __future__ import annotations
 
 from datetime import date
@@ -9,10 +9,13 @@ from prog_stock.brokers.port import BrokerPort
 from prog_stock.config import settings
 from prog_stock.data import universe as univ
 from prog_stock.data.history import load_history
+from prog_stock.news import monitor as news_monitor
+from prog_stock.storage.db import Database
 from prog_stock.strategies.canslim_sepa import CanslimSepaStrategy
 
 
-def build_report(today: date, broker: BrokerPort, strategy: CanslimSepaStrategy) -> str:
+def build_report(today: date, broker: BrokerPort, strategy: CanslimSepaStrategy,
+                 db: Database | None = None) -> str:
     snapshot = univ.load_snapshot(today, settings.cache_dir_universe)
     if snapshot is None:
         return f"[{today}] 사전 점검 — universe 미생성"
@@ -51,5 +54,21 @@ def build_report(today: date, broker: BrokerPort, strategy: CanslimSepaStrategy)
             lines.append(f"  • {s.symbol} ({s.reason})")
     else:
         lines.append("🔴 청산 예정 없음")
+
+    if db is not None:
+        lines.append("")
+        events = news_monitor.upcoming_macro_events(db, today, days=3)
+        if events:
+            lines.append(f"📅 향후 3일 거시 이벤트 {len(events)}건:")
+            for e in events:
+                lines.append(f"  • {e['event_date']} {e['event_type']} [{e['impact_level']}] {e['description']}")
+
+        news = news_monitor.todays_news_summary(db, today, limit=5)
+        if news:
+            lines.append("")
+            lines.append(f"📰 오늘 주요 뉴스:")
+            for n in news:
+                sym = f"[{n['symbol']}] " if n.get("symbol") else ""
+                lines.append(f"  • {sym}{n['headline']}")
 
     return "\n".join(lines)

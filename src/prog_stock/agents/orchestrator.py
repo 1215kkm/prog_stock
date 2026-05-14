@@ -29,9 +29,11 @@ from prog_stock.agents.base import (
     record_decision,
 )
 from prog_stock.agents.bounds import PARAM_BOUNDS
+from prog_stock.agents.news_agent import NewsAgent
 from prog_stock.agents.portfolio import PortfolioManagerAgent
 from prog_stock.agents.regime import RegimeDetectorAgent
 from prog_stock.agents.researcher import ResearcherAgent
+from prog_stock.brokers.port import BrokerPort
 from prog_stock.monitoring.telegram_bot import TelegramNotifier
 from prog_stock.storage.db import Database
 
@@ -39,14 +41,17 @@ log = structlog.get_logger(__name__)
 
 
 class Orchestrator:
-    def __init__(self, db: Database, notifier: TelegramNotifier | None = None) -> None:
+    def __init__(self, db: Database, notifier: TelegramNotifier | None = None,
+                 broker: BrokerPort | None = None) -> None:
         self.db = db
         self.notifier = notifier
+        self.broker = broker
         ensure_agent_schema(db)
         self.researcher = ResearcherAgent(db)
         self.auditor = AuditorAgent(db)
         self.regime = RegimeDetectorAgent(db)
         self.portfolio = PortfolioManagerAgent(db)
+        self.news = NewsAgent(db, broker)
 
     def _validate_param_change(self, payload: dict) -> bool:
         """변경 요청이 PARAM_BOUNDS 경계 안인지 검증. 불변 룰 보호."""
@@ -105,11 +110,21 @@ class Orchestrator:
         for d in self.portfolio.run():
             self._notify(d)
 
+    def run_news(self) -> None:
+        log.info("orchestrator_run_news")
+        for d in self.news.run():
+            self._notify(d)
+
     def daily_pipeline(self) -> None:
         """매일 16:30에 한 번 호출."""
+        self.run_news()
         self.run_regime()
         self.run_auditor()
         self.run_researcher()
+
+    def hourly_news_pulse(self) -> None:
+        """장중 매시간 가벼운 뉴스 폴링."""
+        self.run_news()
 
     def weekly_pipeline(self) -> None:
         """매주 일요일 23:00 호출."""
